@@ -1,87 +1,108 @@
-#include <iomanip>
-#include "opencv2/imgproc/imgproc.hpp"
-#include "opencv2/highgui/highgui.hpp"
 #include <iostream>
-#include <omp.h>
+#include <vector>
+#include <memory.h>
 
-using namespace cv;
 using namespace std;
+typedef int element;
 
-Vec3b RandomColor(int value);
+vector<vector<element>> hybridmedianfilterN(vector<vector<element>> image, int MN_vecindad=1);
+element median(element* elements, int N);
 
-int main(int argc, char* argv[]){
-    clock_t start,end;
-    start=clock();
+int main()
+{
+    cout << "Hello World!" << endl;
+    vector<vector<int>> vect
+            {
+                {1, 2, 3, 100, 210, 40, 50},
+                {4, 5, 6, 110, 230, 30, 55},
+                {7, 8, 9, 140, 210, 20, 52},
+                {4, 27, 36, 160, 20, 60, 50},
+                {5, 58, 65, 10, 240, 70, 75},
+                {7, 89, 94, 40, 220, 80, 82}
+            };
 
-    Mat image=imread("/home/usuario/Descargas/imagen2.jpg");
-    imshow("Imagen Original", image);
+    vect = hybridmedianfilterN(vect,1);
+    cout << "Filas:"<<vect.size()<<"; Columnas:"<<vect[0].size() << endl;
 
-    Mat imageGray, imageCanny;
-    cvtColor(image,imageGray,COLOR_BGR2GRAY);
-    GaussianBlur(imageGray,imageGray,Size(5,5),2);
-    Canny(imageGray,imageCanny,40,100);
-
-    imshow("Imagen en gris", imageGray);
-    imshow("Imagen Canny", imageCanny);
-
-    vector<vector<Point>> contours;
-    vector<Vec4i> hierarchy;
-    #pragma omp parallel
-    findContours(imageCanny,contours,hierarchy,RETR_LIST,CHAIN_APPROX_SIMPLE, Point());
-    Mat imageContours=Mat::zeros(image.size(),CV_8UC1);
-    Mat marks(image.size(),CV_32S);
-    marks=Scalar::all(0);
-    int index=0;
-    int compCount=0;
-    for (;index>=0; index=hierarchy[index][0], compCount++)
-    {
-    drawContours(marks, contours, index, Scalar::all(compCount + 1), 1, 8, hierarchy);
-
-    drawContours(imageContours, contours, index, Scalar(255), 1, 8, hierarchy);
-    }
-    Mat marksShows;
-    convertScaleAbs(marks,marksShows);
-    imshow("marksShows", marksShows);
-    imshow("Imagen Contours",imageContours);
-    watershed(image, marks);
-
-    Mat afterWatershed;
-    convertScaleAbs(marks,afterWatershed);
-    imshow("After Watershed", afterWatershed);
-
-    Mat PerspectiveImage = Mat::zeros(image.size(),CV_8UC3);
-    #pragma omp parallel for
-    for (int i=0; i< marks.rows; i++){
-    for(int j=0; j<marks.cols; j++){
-    int index=marks.at<int>(i,j);
-    if(marks.at<int>(i,j)==-1){
-    PerspectiveImage.at<Vec3b>(i,j)=Vec3b(255,255,255);
-    }
-    else{
-    PerspectiveImage.at<Vec3b>(i,j)= RandomColor(index);
-    }
-    }
-    }
-    imshow("After ColorFill", PerspectiveImage);
-
-    Mat wshed;
-    addWeighted(image,0.4,PerspectiveImage, 0.6,0,wshed);
-    imshow("AddWeighted Image", wshed);
-
-    end=clock();
-    double time_taken=double(end-start)/double(CLOCKS_PER_SEC);
-    cout<<"El tiempo que ha tomado el programa es:" <<fixed << time_taken << setprecision(5);
-    cout<<"segundos"<<endl;
-
-    waitKey(0);
     return 0;
-    }
-    Vec3b RandomColor(int value){
-    value=value%255;
-    RNG rng;
-    int aa=rng.uniform(0,value);
-    int bb=rng.uniform(0,value);
-    int cc=rng.uniform(0,value);
-    return Vec3b(aa,bb,cc);
-    }
+}
 
+//   MEDIAN calculation
+//     elements - input elements
+//     N        - number of input elements
+element median(element* elements, int N)
+{
+   //   Order elements (only half of them)
+   for (int i = 0; i < (N >> 1) + 1; ++i)
+   {
+      //   Find position of minimum element
+      int min = i;
+      for (int j = i + 1; j < N; ++j)
+         if (elements[j] < elements[min])
+            min = j;
+      //   Put found minimum element in its place
+      const element temp = elements[i];
+      elements[i] = elements[min];
+      elements[min] = temp;
+   }
+   //   Get result - the middle element
+   return elements[N >> 1];
+}
+
+
+vector<vector<element>> hybridmedianfilterN(vector<vector<element>> image, int MN_vecindad)
+{
+
+    vector<vector<element>> img_result = image;
+    //N width, M height
+    element N = image[0].size();
+    element M = image.size();
+    //tamano de los elementos de la ventana
+    int tW = (MN_vecindad*4) + 1;
+
+    element window[tW];
+    element results[3];
+
+    int x,y,posicion;
+
+   //   Move window through all elements of the image
+   #pragma omp parallel for collapse(2) shared(img_result,image,M,N,MN_vecindad) private(window,results,x,y) schedule(static)
+   for (y = MN_vecindad; y < M - MN_vecindad; ++y)
+      for (x = MN_vecindad; x < N - MN_vecindad; ++x)
+      {
+
+
+         //   Pick up cross-window elements
+         posicion=0;
+         window[0] = image[y][x];
+         for(int i=1; i<=MN_vecindad; i++){
+             window[1+posicion] = image[(y-i)][x];
+             window[2+posicion] = image[y][(x-i)];
+             window[3+posicion] = image[y][(x+i)];
+             window[4+posicion] = image[(y+i)][x];
+             posicion=i*4;
+         }
+         //   Get median
+         results[0] = median(window, tW);
+
+         //   Pick up x-window elements
+         window[0] = image[y][x];
+         posicion=0;
+         for(int i=1; i<=MN_vecindad; i++){
+             window[1+posicion] = image[(y-i)][(x-i)];
+             window[2+posicion] = image[(y-i)][(x+i)];
+             window[3+posicion] = image[(y+i)][(x-i)];
+             window[4+posicion] = image[(y+i)][(x+i)];
+             posicion=i*4;
+         }
+         //   Get median
+         results[1] = median(window, tW);
+         //   Pick up leading element
+         results[2] = image[y][x];
+         //   Get result
+         img_result[y][x] = median(results, 3);
+      }
+
+
+   return img_result;
+}
