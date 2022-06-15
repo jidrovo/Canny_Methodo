@@ -1,0 +1,15 @@
+cmake_minimum_required(VERSION 3.5)
+
+project(watershed2 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package( OpenCV REQUIRED)
+
+include_directories( ${OpenCV_INCLUDE_DIRS} )
+
+find_package(OpenMP REQUIRED)
+add_executable(watershed2 main.cpp)
+target_link_libraries( watershed2 ${OpenCV_LIBS})
+target_link_libraries( watershed2 OpenMP::OpenMP_CXX)
